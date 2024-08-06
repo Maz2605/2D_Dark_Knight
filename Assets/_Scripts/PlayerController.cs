@@ -12,17 +12,26 @@ public class NewBehaviourScript : MonoBehaviour
     private bool isFacingRight = true;
     private bool isWalking;
     private bool isGrounded;
+    private bool isTouchedWall;
+    private bool isWallSliding;
     private bool canJump;
 
     private Rigidbody2D rb;
     private Animator anim;
 
-    public int amountOfJump = 1;
+    public int amountOfJump = 2;
     public float jumpForce = 16.0f;
-    public float movementSpeed = 7.0f;
+    public float movementSpeed = 10.0f;
+    public float wallSlidingSpeed = 1f;
     public float groundCheckRadius;
+    public float wallCheckDistance;
+    public float movementForceInAir = 50f;
+    public float airDragMultiplayer = 0.95f;
+    public float variableJumpHeightMultiplayer = 0.5f;
+
     public Transform groundCheck;
     public LayerMask whatIsGround;
+    public Transform wallCheck;
 
     private void Start()
     {
@@ -33,22 +42,24 @@ public class NewBehaviourScript : MonoBehaviour
 
     private void Update()
     {
-        CheckInput();
-        CheckMovementDirection();
-        UpdateAnimation();
-        CheckIfCanJump();
+        this.CheckInput();
+        this.CheckMovementDirection();
+        this.UpdateAnimation();
+        this.CheckIfCanJump();
+        this.CheckIfWallSliding();
     }
 
     private void FixedUpdate()
     {
-        ApplyMovement();
-        CheckSurroundings();
+        this.ApplyMovement();
+        this.CheckSurroundings();
     }
-
+     
     private void UpdateAnimation()
     {
         anim.SetBool("isWalking", isWalking);
         anim.SetBool("isGrounded", isGrounded);
+        anim.SetBool("isWallSliding", isWallSliding);
         anim.SetFloat("yVelocity", rb.velocity.y);
     }
     private void CheckInput()
@@ -58,6 +69,11 @@ public class NewBehaviourScript : MonoBehaviour
         if (Input.GetButtonDown("Jump"))
         {
             Jump();
+        }
+
+        if (Input.GetButtonUp("Jump"))
+        {
+            rb.velocity = new Vector2(rb.velocity.x, rb.velocity.y * variableJumpHeightMultiplayer);
         }
     }
 
@@ -81,10 +97,11 @@ public class NewBehaviourScript : MonoBehaviour
             isWalking = false;
         }
     }
-    //Ground Check
     private void CheckSurroundings()
     {
         isGrounded = Physics2D.OverlapCircle(groundCheck.position, groundCheckRadius, whatIsGround);
+
+        isTouchedWall = Physics2D.Raycast(wallCheck.position, transform.right, wallCheckDistance, whatIsGround);
     }
     private void CheckIfCanJump()
     {
@@ -101,16 +118,53 @@ public class NewBehaviourScript : MonoBehaviour
             canJump = true;
         }
     }
+    private void CheckIfWallSliding()
+    {
+        if(isTouchedWall && !isGrounded && rb.velocity.y < 0)
+        {
+            isWallSliding = true;
+        }
+        else
+        {
+            isWallSliding = false;
+        }
+    }
     //Di chuyển 
     private void ApplyMovement()
     {
-        rb.velocity = new Vector2(movementSpeed * movementInputDirection, rb.velocity.y);
+        if (isGrounded)
+        {
+            rb.velocity = new Vector2(movementSpeed * movementInputDirection, rb.velocity.y);
+        }else if(!isGrounded && !isWallSliding && movementInputDirection != 0)
+        {
+            Vector2 forceToAdd = new Vector2(movementForceInAir * movementInputDirection, 0);
+            rb.AddForce(forceToAdd);
+
+            if(Mathf.Abs(rb.velocity.x) > movementSpeed)
+            {
+                rb.velocity = new Vector2(movementSpeed * movementInputDirection, rb.velocity.y);
+            }
+        }else if(!isGrounded && !isWallSliding && movementInputDirection == 0)
+        {
+            rb.velocity = new Vector2(rb.velocity.x * airDragMultiplayer, rb.velocity.y);
+        }
+
+        if (isWallSliding)
+        {
+            if(rb.velocity.y < -wallSlidingSpeed)
+            {
+                rb.velocity = new Vector2(rb.velocity.x, -wallSlidingSpeed);
+            }
+        }
     }   
     //Lật player khi di chuyển trái phải
     private void Flip()
     {
-        isFacingRight = !isFacingRight;
-        transform.Rotate(0.0f, 180.0f, 0.0f);
+        if(!isWallSliding)
+        {
+            isFacingRight = !isFacingRight;
+            transform.Rotate(0.0f, 180.0f, 0.0f);
+        }
     }
     //Nhảy
     private void Jump()
@@ -121,9 +175,11 @@ public class NewBehaviourScript : MonoBehaviour
             amountOfJumpsLeft--;
         }
     }
-    //
+    //Vẽ vị trí tiếp xúc
     private void OnDrawGizmos()
     {
-        Gizmos.DrawWireSphere(groundCheck.position, groundCheckRadius);
+        Gizmos.DrawWireSphere(groundCheck.position, groundCheckRadius);//Tiếp xúc với mặt đất
+
+        Gizmos.DrawLine(wallCheck.position, new Vector3(wallCheck.position.x + wallCheckDistance, wallCheck.position.y, 0.0f));// Tiếp xúc với tường
     }
 }
