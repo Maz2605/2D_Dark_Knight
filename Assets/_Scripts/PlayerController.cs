@@ -16,9 +16,9 @@ public class NewBehaviourScript : MonoBehaviour
     private int lastWallJumpDirection;
 
     private bool isFacingRight = true;
-    private bool isWalking ;
+    private bool isWalking;
     private bool isGrounded;
-    private bool isTouchedWall;
+    private bool isTouchingWall;
     private bool isWallSliding;
     private bool canNormalJump;
     private bool canWallJump;
@@ -27,6 +27,13 @@ public class NewBehaviourScript : MonoBehaviour
     private bool canMove;
     private bool canFlip;
     private bool hasWallJumped;
+    private bool isTouchingLedge;
+    private bool canClimbLedge = false;
+    private bool ledgeDetected; 
+
+    private Vector2 ledgePosBot;
+    private Vector2 ledgePos1;
+    private Vector2 ledgePos2;
 
     private Rigidbody2D rb;
     private Animator anim;
@@ -47,11 +54,17 @@ public class NewBehaviourScript : MonoBehaviour
     public float turnTimerSet = 0.1f;
     public float walljumpTimerSet = 0.5f;
 
+    public float ledgeClimbXOffset1 = 0f;
+    public float ledgeClimbYOffset1 = 0f;
+    public float ledgeClimbXOffset2 = 0f;
+    public float ledgeClimbYOffset2 = 0f;
+
     public Vector2 wallHopDirection;
     public Vector2 wallJumpDirection;
 
     public Transform groundCheck;
     public Transform wallCheck;
+    public Transform ledgeCheck;
 
     public LayerMask whatIsGround;
 
@@ -71,6 +84,7 @@ public class NewBehaviourScript : MonoBehaviour
         UpdateAnimation();
         CheckIfCanJump();
         CheckIfWallSliding();
+        CheckLedgeClimb();
         CheckJump();
     }
 
@@ -93,7 +107,7 @@ public class NewBehaviourScript : MonoBehaviour
 
         if (Input.GetButtonDown("Jump"))
         {
-            if(isGrounded || (amountOfJumpsLeft > 0 && isTouchedWall))
+            if(isGrounded || (amountOfJumpsLeft > 0 && isTouchingWall))
             {
                 NormalJump(); 
             }
@@ -104,7 +118,7 @@ public class NewBehaviourScript : MonoBehaviour
             }
         }
 
-        if(Input.GetButtonDown("Horizontal") && isTouchedWall)
+        if(Input.GetButtonDown("Horizontal") && isTouchingWall)
         {
             if(!isGrounded && movementInputDirection != facingDirection )
             {
@@ -115,7 +129,7 @@ public class NewBehaviourScript : MonoBehaviour
             }
         }
 
-        if (!canMove)
+        if (turnTimer >= 0)
         {
             turnTimer -= Time.deltaTime;
 
@@ -136,7 +150,7 @@ public class NewBehaviourScript : MonoBehaviour
     {
         if(jumpTimer > 0)
         {
-            if(!isGrounded && isTouchedWall && movementInputDirection != 0 && movementInputDirection != facingDirection) 
+            if(!isGrounded && isTouchingWall && movementInputDirection != 0 && movementInputDirection != facingDirection) 
             {
                 WallJump();
             }
@@ -192,7 +206,16 @@ public class NewBehaviourScript : MonoBehaviour
     {
         isGrounded = Physics2D.OverlapCircle(groundCheck.position, groundCheckRadius, whatIsGround);
 
-        isTouchedWall = Physics2D.Raycast(wallCheck.position, transform.right, wallCheckDistance, whatIsGround);
+        isTouchingWall = Physics2D.Raycast(wallCheck.position, transform.right, wallCheckDistance, whatIsGround);
+
+        isTouchingLedge = Physics2D.Raycast(ledgeCheck.position, transform.right, wallCheckDistance, whatIsGround);
+
+        if(isTouchingWall && !isTouchingLedge && !ledgeDetected )
+        {
+            ledgeDetected = true;
+            ledgePosBot = ledgeCheck.position;
+        }
+
     }
     private void CheckIfCanJump()
     {
@@ -201,7 +224,7 @@ public class NewBehaviourScript : MonoBehaviour
             amountOfJumpsLeft = amountOfJump;
         }
 
-        if (isTouchedWall)
+        if (isTouchingWall)
         {
             canWallJump = true;
         }
@@ -221,13 +244,39 @@ public class NewBehaviourScript : MonoBehaviour
     }
     private void CheckIfWallSliding()
     {
-        if(!isGrounded && isTouchedWall && movementInputDirection == facingDirection && rb.velocity.y < 0)
+        if(!isGrounded && isTouchingWall && movementInputDirection == facingDirection && rb.velocity.y < 0 && !canClimbLedge)
         {
             isWallSliding = true;
         }
         else
         {
             isWallSliding = false;
+        }
+    }
+    private void CheckLedgeClimb()
+    {
+        if(ledgeDetected && !canClimbLedge)
+        {
+            canClimbLedge = true;
+
+            if(isFacingRight)
+            {
+                ledgePos1 = new Vector2(Mathf.Floor(ledgePosBot.x + wallCheckDistance) - ledgeClimbXOffset1, Mathf.Floor(ledgePosBot.y) + ledgeClimbYOffset1);
+                ledgePos2 = new Vector2(Mathf.Floor(ledgePosBot.y + wallCheckDistance) + ledgeClimbXOffset2, Mathf.Floor(ledgePosBot.y) + ledgeClimbYOffset2);
+              
+            }
+            else
+            {
+                ledgePos1 = new Vector2(Mathf.Ceil(ledgePosBot.x - wallCheckDistance) + ledgeClimbXOffset1, Mathf.Floor(ledgePosBot.y) + ledgeClimbYOffset1);
+                ledgePos2 = new Vector2(Mathf.Ceil(ledgePosBot.x - wallCheckDistance) - ledgeClimbXOffset2, Mathf.Floor(ledgePosBot.y) + ledgeClimbYOffset2);
+               
+            }
+
+            canMove = false;
+            canFlip = false;
+
+            Debug.Log("Climb");
+            anim.SetBool("canClimbLedge", canClimbLedge);
         }
     }
     //Di chuyển 
@@ -301,5 +350,18 @@ public class NewBehaviourScript : MonoBehaviour
         Gizmos.DrawWireSphere(groundCheck.position, groundCheckRadius);//Tiếp xúc với mặt đất
 
         Gizmos.DrawLine(wallCheck.position, new Vector3(wallCheck.position.x + wallCheckDistance, wallCheck.position.y, 0.0f));// Tiếp xúc với tường
+
+        Gizmos.DrawLine(ledgeCheck.position, new Vector3(ledgeCheck.position.x + wallCheckDistance, ledgeCheck.position.y, 0.0f));// Tiếp xúc với mép
+    }
+
+    public void FinishClimbLedge()
+    {
+        canClimbLedge = false;
+        transform.position = ledgePos2;
+        canMove = true;
+        canFlip = true;
+        ledgeDetected = false;
+        Debug.Log("Done Climb");
+        anim.SetBool("canClimbLedge", canClimbLedge);
     }
 }
